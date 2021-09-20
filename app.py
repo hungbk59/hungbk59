@@ -1,7 +1,5 @@
 import requests
 import models
-import schedule
-import time
 from bs4 import BeautifulSoup
 from multiprocessing import Process
 
@@ -10,7 +8,7 @@ def get_link(link_base):
     list_link = []
     link_page = link_base
     csc = 0  # Check status code
-    num = 0  # Number page
+    num = 1  # Number page
     while csc != 302:
         num += 1
         list_link.append(link_page)
@@ -23,11 +21,9 @@ def get_link(link_base):
     return list_link
 
 # Hàm cào dữ liệu link bài báo, lưu và check dữ liệu trong database
-def crwal(list_link):
-
-    for L in range(len(list_link)):
+def crwal(head, last, list_link):
+    for L in range(head, last):
         link_page = list_link[L]
-        r = requests.get(link_page)
         r = requests.get(link_page)
         soup = BeautifulSoup(r.content, "html.parser")
         titles = soup.findAll('h3', class_='title-news')
@@ -59,16 +55,28 @@ def crwal(list_link):
                 break
 
 def main():
-    p = Process(target=crwal, args=(get_link('https://vnexpress.net/giao-duc'),))
-    p.start()
-    p.join()
-def run ():
-    if __name__ == "__main__":
-        main()
+    list_link = get_link('https://vnexpress.net/giao-duc')
+    num_link = len(list_link)
+    a = num_link // 4
+    b = num_link // 2
+    c = (3 * num_link) // 4
 
-schedule.every().day.at("17:00").do(run)
+    p1 = Process(target=crwal, args=(0, a, list_link))
+    p1.start()
 
-# Kiểm tra schedule
-while True:
-    schedule.run_pending()
-    time.sleep(1)
+    p2 = Process(target=crwal, args=(a, b, list_link))
+    p2.start()
+
+    p3 = Process(target=crwal, args=(b, c, list_link))
+    p3.start()
+
+    p4 = Process(target=crwal, args=(c, num_link, list_link))
+    p4.start()
+
+    p1.join()
+    p2.join()
+    p3.join()
+    p4.join()
+
+if __name__ == "__main__":
+    main()
