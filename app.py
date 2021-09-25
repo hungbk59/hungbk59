@@ -1,29 +1,24 @@
 import requests
 import models
 from bs4 import BeautifulSoup
-from multiprocessing import Process
+from multiprocessing import Process, Queue
 
 # Hàm lấy ra danh sách link page
-def get_link(link_base):
-    list_link = []
-    link_page = link_base
+def get_link(q):
+    link_base = 'https://vnexpress.net/giao-duc'
     csc = 0  # Check status code
-    num = 1  # Number page
+    num = 0 # Number page
     while csc != 302:
         num += 1
-        list_link.append(link_page)
         link_page = link_base + '-p' + str(num)
-        r = requests.get(link_page)
-        check_redirect = r.history
-
-        for stc in check_redirect:
-            csc = stc.status_code
-    return list_link
+        r = requests.get(link_page, allow_redirects=False)
+        csc = r.status_code
+        q.put(link_page)
 
 # Hàm cào dữ liệu link bài báo, lưu và check dữ liệu trong database
-def crwal(head, last, list_link):
-    for L in range(head, last):
-        link_page = list_link[L]
+def crwal(q):
+    while not q.empty():
+        link_page = q.get()
         r = requests.get(link_page)
         soup = BeautifulSoup(r.content, "html.parser")
         titles = soup.findAll('h3', class_='title-news')
@@ -54,23 +49,17 @@ def crwal(head, last, list_link):
             else:
                 break
 
-def main():
-    list_link = get_link('https://vnexpress.net/giao-duc')
-    num_link = len(list_link)
-    a = num_link // 4
-    b = num_link // 2
-    c = (3 * num_link) // 4
-
-    p1 = Process(target=crwal, args=(0, a, list_link))
+def main(q):
+    p1 = Process(target=crwal, args=(q,))
     p1.start()
 
-    p2 = Process(target=crwal, args=(a, b, list_link))
+    p2 = Process(target=crwal, args=(q,))
     p2.start()
 
-    p3 = Process(target=crwal, args=(b, c, list_link))
+    p3 = Process(target=crwal, args=(q,))
     p3.start()
 
-    p4 = Process(target=crwal, args=(c, num_link, list_link))
+    p4 = Process(target=crwal, args=(q,))
     p4.start()
 
     p1.join()
@@ -78,5 +67,12 @@ def main():
     p3.join()
     p4.join()
 
+    print('Kết thúc')
+
 if __name__ == "__main__":
-    main()
+    q = Queue()
+    p_getlink = Process(target=get_link, args=(q,))
+    p_getlink.start()
+    p_getlink.join()
+
+    main(q)
