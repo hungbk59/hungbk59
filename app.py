@@ -4,10 +4,9 @@ from bs4 import BeautifulSoup
 from multiprocessing import Process, Queue
 
 # Hàm lấy ra danh sách link page
-def get_link(q):
-    link_base = 'https://vnexpress.net/giao-duc'
+def get_link(link_base,q):
     csc = 0  # Check status code
-    num = 0 # Number page
+    num = 0  # Number page
     while csc != 302:
         num += 1
         link_page = link_base + '-p' + str(num)
@@ -15,10 +14,18 @@ def get_link(q):
         csc = r.status_code
         q.put(link_page)
 
+    q.put("KETTHUC")
+    q.put("KETTHUC")
+    q.put("KETTHUC")
+    q.put("KETTHUC")
+
 # Hàm cào dữ liệu link bài báo, lưu và check dữ liệu trong database
 def crwal(q):
-    while not q.empty():
+    while True:
         link_page = q.get()
+        if link_page == "KETTHUC":
+            break
+        print(link_page)
         r = requests.get(link_page)
         soup = BeautifulSoup(r.content, "html.parser")
         titles = soup.findAll('h3', class_='title-news')
@@ -50,29 +57,31 @@ def crwal(q):
                 break
 
 def main(q):
-    p1 = Process(target=crwal, args=(q,))
-    p1.start()
+    p1_crawl = Process(target=crwal, args=(q,))
+    p1_crawl.start()
 
-    p2 = Process(target=crwal, args=(q,))
-    p2.start()
+    p2_crawl = Process(target=crwal, args=(q,))
+    p2_crawl.start()
 
-    p3 = Process(target=crwal, args=(q,))
-    p3.start()
+    p3_crawl = Process(target=crwal, args=(q,))
+    p3_crawl.start()
 
-    p4 = Process(target=crwal, args=(q,))
-    p4.start()
+    p4_crawl = Process(target=crwal, args=(q,))
+    p4_crawl.start()
 
-    p1.join()
-    p2.join()
-    p3.join()
-    p4.join()
+    p1_crawl.join()
+    p2_crawl.join()
+    p3_crawl.join()
+    p4_crawl.join()
 
     print('Kết thúc')
 
 if __name__ == "__main__":
+    link_base = 'https://vnexpress.net/giao-duc'
     q = Queue()
-    p_getlink = Process(target=get_link, args=(q,))
+    p_getlink = Process(target=get_link, args=(link_base,q,))
     p_getlink.start()
-    p_getlink.join()
-
+    
     main(q)
+    
+    p_getlink.join()
