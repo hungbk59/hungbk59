@@ -40,7 +40,8 @@ def get_search():
     noidung = request.args.get("noidung", type=str)
     page = request.args.get("page", type=int)
     limit = request.args.get("limit", type=int)
-
+    
+    # Loại bỏ những ký tự không mong muốn mà người dùng nhập vào
     if filters(tieude) == 0 or filters(noidung) == 0:
         tieude = loc(tieude)
         noidung = loc(noidung)
