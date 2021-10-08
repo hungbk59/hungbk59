@@ -1,9 +1,9 @@
 import requests
-import model
+import models
 from bs4 import BeautifulSoup
 from multiprocessing import Process, Queue
 
-data = model.Data
+data = models.Data
 
 
 def get_link(links_base, queue):
