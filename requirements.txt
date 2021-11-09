@@ -1,5 +1,3 @@
 flask
 peewee
-requests
-BeautifulSoup
 version 1.0
