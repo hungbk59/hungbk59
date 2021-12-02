@@ -1,7 +1,7 @@
 flask
+flask-cors
 peewee
 jwt
 walrus
 werkzeug..security
-angular 12
 version 1.0
