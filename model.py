@@ -1,5 +1,18 @@
-from peewee import (MySQLDatabase, Model, TextField, AutoField, CharField)
+import mysql.connector
 
+from peewee import MySQLDatabase, Model, TextField, AutoField, CharField
+
+
+cretedb = mysql.connector.connect(
+    host="localhost",
+    user="admin",
+    password="abc123")
+mycur = cretedb.cursor()
+try:
+    mycur.execute("CREATE DATABASE test")
+except:
+    print('Database exists')
+    
 db = MySQLDatabase('test', user='admin', password='abc123')
 
 
