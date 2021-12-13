@@ -10,8 +10,8 @@ cretedb = mysql.connector.connect(
 mycur = cretedb.cursor()
 try:
     mycur.execute("CREATE DATABASE test")
-except:
-    print('Database exists')
+except Exception as ex:
+    print(str(ex))
     
 db = MySQLDatabase('test', user='admin', password='abc123')
 
