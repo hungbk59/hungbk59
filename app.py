@@ -4,16 +4,18 @@ import jwt
 
 from datetime import datetime, timedelta
 
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, session
 from flask_cors import CORS
 
 from werkzeug.security import generate_password_hash, check_password_hash
 from walrus import Walrus
 
-
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'Herocoders'
-CORS(app, resources={r"/data/*": {"origins": "*"}})
+app.config.update(
+    SECRET_KEY='Herocoders'
+    # SESSION_COOKIE_SECURE=True
+)
+CORS(app, resources={r"/api/*": {"origins": "*"}}, supports_credentials=True)
 
 dbw = Walrus(host='127.0.0.1', port=6379, db=0)
 cache = dbw.cache()
@@ -24,16 +26,16 @@ user = model.Users
 
 def check_character(character):
     """Danh sách các ký tự không mong muốn"""
-    special = '''`~!#$%^&*()_=+-*/\[]{}|:;<>'"?'''
+    special = '''`~!#$%^&*()_=+-*/[]{}|:;<>'"?'''
     for i in range(len(special)):
         if character is special[i]:
-            return 0
-    return 1
+            return True
+    return False
 
 
 def loc(char):
     """Danh sách các ký tự loại bỏ"""
-    special = '''`~!#$%^&*()_=+-*/\[]{}|:;<>'"?'''
+    special = '''`~!#$%^&*()_=+-*/[]{}|:;<>'"?'''
     for i in range(len(special)):
         char = char.replace(special[i], '')
     return char
@@ -41,22 +43,22 @@ def loc(char):
 
 def filters(char):
     for i in range(len(char)):
-        if check_character(char[i]) == 0:
-            return 0
-    return 1
+        if check_character(char[i]):
+            return True
+    return False
 
 
-@app.route("/data/search", methods=["GET"])
-@cache.cached(timeout=10)
+@app.route("/api/search", methods=["GET"])
+@cache.cached(timeout=5)
 def get_search():
     tieude = request.args.get("tieude", type=str)
     noidung = request.args.get("noidung", type=str)
     news = []
     sel = data.select()
-    if filters(tieude) == 0 or filters(noidung) == 0:
+    if filters(tieude) or filters(noidung):
         tieude = loc(tieude)
         noidung = loc(noidung)
-    if tieude == "" and noidung == "":
+    if not tieude and not noidung:
         return jsonify({"message": "Enter search content"})
 
     if tieude and noidung:
@@ -74,7 +76,7 @@ def get_search():
             news.append(row)
         return jsonify({"list_news": news})
 
-    elif noidung:
+    if noidung:
         new = sel.where(data.noidung ** ("%" + noidung + "%"))\
             .dicts()
         for row in new:
@@ -82,11 +84,12 @@ def get_search():
         return jsonify({"list_news": news})
 
 
-@app.route("/data/search/<int:num>", methods=["GET"])
-@cache.cached(timeout=10)
+@app.route("/api/search/<int:num>", methods=["GET"])
+@cache.cached(timeout=5)
 def get_search_id(num):
-    if id == 0:
-        return jsonify({"message": "Not exist ID"})
+    check_id = data.select().count()
+    if num > check_id or num == 0:
+        return jsonify({"status": 404, "message": "Not exist ID"})
     else:
         sel = data.select()
         new = sel.where(data.id == num).dicts()
@@ -94,44 +97,50 @@ def get_search_id(num):
             return jsonify({"list_news": row})
 
 
-@app.route("/data/update", methods=["PUT", "POST"])
+@app.route("/api/update", methods=["PUT", "POST"])
 def update_data():
-    _title = request.form["tieude"]
-    _content = request.form["noidung"]
-    _url = request.form["url"]
+    if 'id' in session:
+        _title = request.form["tieude"]
+        _content = request.form["noidung"]
+        _url = request.form["url"]
 
-    # Kiểm tra dữ liệu nhập vào có hợp lệ
-    if filters(_title) == 0 or filters(_content) == 0:
-        return jsonify({"status": 401, "message": "Re-enter Data"})
+        # Kiểm tra dữ liệu nhập vào có hợp lệ
+        if filters(_title) or filters(_content):
+            return jsonify({"status": 401, "message": "Re-enter Data"})
 
-    # Sửa tiêu đề và nội dung theo URI của bài báo
-    if request.method == "PUT":
-        check_url = data.select(data.uri).where(data.uri == _url).count()
-        if check_url == 0:
-            return jsonify({"status": 404, "message": "Not exist News"})
-        else:
+        # Sửa tiêu đề và nội dung theo URI của bài báo
+        if request.method == "PUT":
+            check_url = data.select(data.uri).where(data.uri == _url).count()
+            if check_url == 0:
+                return jsonify({"status": 404, "message": "Not exist News"})
+            else:
+                (data
+                 .update(tieude=_title, noidung=_content)
+                 .where(data.uri == _url).execute())
+
+                return jsonify({"status": 200, "message": "Update Successfull"})
+
+        # Thêm tiêu đề và nội dung của 1 bài báo mới
+        elif request.method == "POST":
             (data
-             .update(tieude=_title, noidung=_content)
-             .where(data.uri == _url).execute())
+             .insert(tieude=_title, noidung=_content, uri=_url)
+             .execute())
 
-            return jsonify({"status": 200, "message": "Update Successfull"})
-
-    # Thêm tiêu đề và nội dung của 1 bài báo mới
-    elif request.method == "POST":
-        (data
-         .insert(tieude=_title, noidung=_content, uri=_url)
-         .execute())
-
-        return jsonify({"status": 200, "message": "Insert Successfull"})
+            return jsonify({"status": 200, "message": "Insert Successfull"})
 
 
-@app.route("/data/delete/<int:num>", methods=["DELETE"])
+@app.route("/api/delete/<int:num>", methods=["DELETE"])
 def delete_data(num):
-    data.delete().where(data.id == num).execute()
-    return jsonify({"status": 200, "message": "Delete Successfull"})
+    if 'id' in session:
+        check_id = data.select().count()
+        if num > check_id or num == 0:
+            return jsonify({"status": 404, "message": "Not exist ID"})
+        else:
+            data.delete().where(data.id == num).execute()
+            return jsonify({"status": 200, "message": "Delete Successfull"})
 
 
-@app.route("/data/login", methods=["POST"])
+@app.route("/api/login", methods=['POST', 'GET'])
 def login():
     _email = request.form["email"]
     _password = request.form["password"]
@@ -140,21 +149,22 @@ def login():
                    .where(user.email == _email)
                    .count())
     if check_email == 1:
-        query = user.select()\
+        query = user.select() \
             .where(user.email == _email).dicts()
 
         for row in query:
+            user_id = row["id"]
             password = row["password"]
             if row:
                 if check_password_hash(password, _password):
-                    token = jwt.encode({
-                        'email': _email,
-                        'exp': datetime.utcnow() + timedelta(minutes=60)},
-                        app.config['SECRET_KEY'])
-                    return jsonify({
-                        "status": 200,
-                        "message": "logged in successfully",
-                        "token": token})
+                    session['id'] = user_id
+                    token = jwt.encode({"message": "logged in successfully",
+                                        'exp': datetime.utcnow() + timedelta(minutes=60)},
+                                       app.config['SECRET_KEY'])
+                    resp = jsonify({"status": 200,
+                                    "token": token})
+
+                    return resp
                 else:
                     return jsonify({"status": 404,
                                     "message": "Bad Request - invalid credentials"})
@@ -163,12 +173,12 @@ def login():
                         "message": "Bad Request - invalid credentials"})
 
 
-@app.route('/data/register', methods=["POST"])
+@app.route('/api/register', methods=["POST"])
 def register():
     _email = request.form["email"]
     _password = request.form["password"]
     _retype_password = request.form["re_password"]
-    if filters(_email) == 0 or filters(_password) == 0:
+    if filters(_email) or filters(_password):
         return jsonify({"status": 401, "message": "Re-enter Data"})
     if _retype_password != _password:
         return jsonify({"status": 400, "message": "re-password incorrect"})
@@ -184,6 +194,13 @@ def register():
         return jsonify({"status": 200, "message": "Register in successfully"})
     else:
         return jsonify({"status": 404, "message": "email already exist"})
+
+
+@app.route('/api/logout', methods=["GET"])
+def logout():
+    if 'id' in session:
+        session.pop('id', None)
+        return jsonify({'message': 'You successfully logged out'})
 
 
 @app.errorhandler(400)
